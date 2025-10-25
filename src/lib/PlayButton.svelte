@@ -555,7 +555,7 @@
   .progressionList li {
     padding: 5px 10px;
     border: 2px transparent;
-    font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+    font-family: monospace;
     font-weight: 900;
     font-size: 14px;
     min-width: 30px;
