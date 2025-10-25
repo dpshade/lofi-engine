@@ -11,8 +11,10 @@
   import Visualizer from "../lib/components/Visualizer/index.svelte";
   import ChordProgression from "../lib/engine/Chords/ChordProgression";
   import intervalWeights from "../lib/engine/Chords/IntervalWeights";
+  import pentatonicIntervalWeights from "../lib/engine/Chords/PentatonicIntervalWeights";
   import Keys from "../lib/engine/Chords/Keys";
-  import { fiveToFive } from "../lib/engine/Chords/MajorScale";
+  import { fiveToFive as majorScale } from "../lib/engine/Chords/MajorScale";
+  import Chords from "../lib/engine/Chords/Chords";
   import Hat from "../lib/engine/Drums/Hat";
   import Kick from "../lib/engine/Drums/Kick";
   import Noise from "../lib/engine/Drums/Noise";
@@ -49,6 +51,7 @@
 
   // State variables
   let key = "C";
+  let scaleType = "major"; // "major" or "major-pentatonic"
   let progression = [];
   let scale = [];
   let progress = 0;
@@ -69,6 +72,7 @@
   let melodyOff = false;
 
   let isPlaying = false;
+  let previousVoicing = [];
 
   // Initialize instruments
   const pn = new Piano(() => (pianoLoaded = true)).sampler;
@@ -146,64 +150,74 @@
     kickLoop.humanize = true;
     snareLoop.humanize = true;
     hatLoop.humanize = true;
-
-    // Listen for spacebar press
-    const handleKeydown = (e) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        toggle();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeydown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeydown);
-    };
-  });
-
-  onDestroy(() => {
-    if (Tone.Transport.state === "started") {
-      noise.stop();
-      Tone.Transport.stop();
-    }
   });
 
   function nextChord() {
-    const nextProgress = progress === progression.length - 1 ? 0 : progress + 1;
-    const nextKickOff = Math.random() < 0.15;
-    const nextSnareOff = Math.random() < 0.2;
-    const nextHatOff = Math.random() < 0.25;
-    const nextMelodyDensity = Math.random() * 0.3 + 0.2;
-    const nextMelodyOff = Math.random() < 0.25;
-
-    if (progress === 4) {
-      progress = nextProgress;
-      kickOff = nextKickOff;
-      snareOff = nextSnareOff;
-      hatOff = nextHatOff;
-    } else if (progress === 0) {
-      progress = nextProgress;
-      kickOff = nextKickOff;
-      snareOff = nextSnareOff;
-      hatOff = nextHatOff;
-      melodyDensity = nextMelodyDensity;
-      melodyOff = nextMelodyOff;
-    } else {
-      progress = nextProgress;
-    }
+    progress = (progress + 1) % progression.length;
   }
 
   function playChord() {
     const chord = progression[progress];
     const root = Tone.Frequency(key + "3").transpose(chord.semitoneDist);
     const size = 4;
-    const voicing = chord.generateVoicing(size);
+    
+    // Use gentle voice leading if we have previous voicing
+    const voicing = chord.generateVoicing(size, previousVoicing);
+    
+    // Store current voicing for next chord
+    previousVoicing = [...voicing];
+    
     const notes = Tone.Frequency(root)
       .harmonize(voicing)
       .map((f) => Tone.Frequency(f).toNote());
+    
+    // Get note names and intervals
+    const rootNote = root.toNote();
+    const noteNames = notes.map(note => {
+      const noteName = note.replace(/\d+/, ''); // Remove octave
+      const octave = note.match(/\d+/)?.[0] || '3';
+      return noteName;
+    });
+    
+    // Calculate intervals from root
+    const intervals = notes.map(note => {
+      const rootMidi = Tone.Frequency(root).toMidi();
+      const noteMidi = Tone.Frequency(note).toMidi();
+      return noteMidi - rootMidi;
+    });
+    
+    const intervalNames = intervals.map(semi => {
+      if (semi === 0) return 'R';
+      if (semi === 3) return 'm3';
+      if (semi === 4) return 'M3';
+      if (semi === 7) return 'P5';
+      if (semi === 10) return 'm7';
+      if (semi === 11) return 'M7';
+      return `${semi}`;
+    });
+    
+    // Simplified debug logging
+    console.log(`🎹 CHORD ${progress + 1}/8: ${toRomanNumeral(chord.degree)} in ${key} ${scaleType}`);
+    console.log(`   Notes: [${noteNames.join(" - ")}]`);
+    console.log(`   Intervals: [${intervalNames.join(" - ")}]`);
+    console.log(`   Root: ${rootNote}`);
+    
+    // Add procedural dynamics to chords with musical context
+    let baseVelocity = 0.7; // Base velocity
+    
+    // Make certain chord degrees naturally louder or softer
+    if (chord.degree === 1 || chord.degree === 4) {
+      baseVelocity = 0.8; // Tonic and subdominant slightly stronger
+    } else if (chord.degree === 5) {
+      baseVelocity = 0.85; // Dominant strongest for resolution
+    } else if (chord.degree === 6) {
+      baseVelocity = 0.6; // Submediant more gentle
+    }
+    
+    // Add random variation
+    const chordVelocity = Math.max(0.4, Math.min(1.0, baseVelocity + (Math.random() - 0.5) * 0.2));
     // @ts-ignore
-    pn.triggerAttackRelease(notes, "1n");
+    pn.triggerAttackRelease(notes, "1n", undefined, chordVelocity);
     nextChord();
   }
 
@@ -226,9 +240,19 @@
       }
     }
 
+    // Choose interval weights based on scale type
+    let currentIntervalWeights;
+    if (scaleType === "major-pentatonic") {
+      currentIntervalWeights = pentatonicIntervalWeights;
+    } else if (scaleType === "major") {
+      currentIntervalWeights = intervalWeights;
+    } else {
+      currentIntervalWeights = intervalWeights; // fallback
+    }
+    
     let weights = descend
-      ? intervalWeights.slice(0, descendRange)
-      : intervalWeights.slice(0, ascendRange);
+      ? currentIntervalWeights.slice(0, descendRange)
+      : currentIntervalWeights.slice(0, ascendRange);
 
     const sum = weights.reduce((prev, curr) => prev + curr, 0);
     weights = weights.map((w) => w / sum);
@@ -251,20 +275,95 @@
     const newScalePos = scalePos + scalePosChange;
 
     scalePos = newScalePos;
+    const melodyNote = scale[newScalePos];
+    const noteName = melodyNote.replace(/\d+/, ''); // Remove octave
+    
+    // Add procedural dynamics to melody with musical context
+    let baseMelodyVelocity = 0.8;
+    
+    // Larger intervals get slightly more emphasis
+    if (Math.abs(scaleDist) >= 4) {
+      baseMelodyVelocity = 0.9; // Leaps more prominent
+    } else if (Math.abs(scaleDist) === 1) {
+      baseMelodyVelocity = 0.7; // Steps more gentle
+    }
+    
+    // Directional dynamics - ascending slightly stronger than descending
+    if (scalePosChange > 0) {
+      baseMelodyVelocity += 0.1; // Ascending lines
+    } else {
+      baseMelodyVelocity -= 0.05; // Descending lines
+    }
+    
+    // Add random variation and cap at reasonable range
+    const melodyVelocity = Math.max(0.5, Math.min(1.0, baseMelodyVelocity + (Math.random() - 0.5) * 0.3));
+    
+    console.log(`🎵 Melody: ${noteName} in ${key} ${scaleType} (velocity: ${melodyVelocity.toFixed(2)})`);
     // @ts-ignore
-    pn.triggerAttackRelease(scale[newScalePos], "2n");
+    pn.triggerAttackRelease(melodyNote, "2n", undefined, melodyVelocity);
   }
 
   function generateProgression() {
-    const _scale = fiveToFive;
+    // Reset previous voicing when generating new progression
+    previousVoicing = [];
+    
+    // Randomly choose between plain major and pentatonic major
+    const rand = Math.random();
+    let newScaleType;
+    if (rand < 0.5) {
+      newScaleType = "major-pentatonic";
+    } else {
+      newScaleType = "major";
+    }
+    
     const newKey = Keys[Math.floor(Math.random() * Keys.length)];
-    const newScale = Tone.Frequency(newKey + "5")
-      .harmonize(_scale)
-      .map((f) => Tone.Frequency(f).toNote());
-    const newProgression = ChordProgression.generate(8);
-    const newScalePos = Math.floor(Math.random() * _scale.length);
+    let _scale, chords, newScale, newProgression, newScalePos;
+    
+    if (newScaleType === "major-pentatonic") {
+      // Major with pentatonic melody
+      _scale = majorScale;
+      chords = Chords;
+      
+      const pentatonicScale = [0, 2, 4, 7, 9]; // Major pentatonic: root, 2nd, 3rd, 5th, 6th
+      const pentatonicFiveToFive = [...pentatonicScale.map(n=>n-12).slice(3), ...pentatonicScale, ...pentatonicScale.map(n=>n+12).slice(0,3)];
+      
+      newScale = Tone.Frequency(newKey + "5")
+        .harmonize(pentatonicFiveToFive)
+        .map((f) => Tone.Frequency(f).toNote());
+      newProgression = ChordProgression.generate(8, chords, "major-pentatonic");
+      newScalePos = Math.floor(Math.random() * pentatonicFiveToFive.length);
+      
+      console.log(`=== ${newKey} MAJOR with PENTATONIC MELODY ===`);
+      console.log("Pentatonic scale intervals:", pentatonicFiveToFive);
+    } else if (newScaleType === "major") {
+      // Plain major with full diatonic melody
+      _scale = majorScale;
+      chords = Chords;
+      
+      newScale = Tone.Frequency(newKey + "5")
+        .harmonize(_scale)
+        .map((f) => Tone.Frequency(f).toNote());
+      newProgression = ChordProgression.generate(8, chords, "major");
+      newScalePos = Math.floor(Math.random() * _scale.length);
+      
+      console.log(`=== ${newKey} PLAIN MAJOR PROGRESSION ===`);
+      console.log("Major scale intervals:", _scale);
+    }
+    
+    console.log("Scale notes:", newScale);
+    console.log("Chord progression:");
+    newProgression.forEach((chord, idx) => {
+      const root = Tone.Frequency(newKey + "3").transpose(chord.semitoneDist);
+      const voicing = chord.generateVoicing(4);
+      const notes = Tone.Frequency(root)
+        .harmonize(voicing)
+        .map((f) => Tone.Frequency(f).toNote());
+      console.log(`  ${idx + 1}. Degree ${chord.degree} (${chord.semitoneDist} semitones): [${notes.join(", ")}]`);
+    });
+    console.log("=====================================");
 
     key = newKey;
+    scaleType = newScaleType;
     progress = 0;
     progression = newProgression;
     scale = newScale;
@@ -312,6 +411,20 @@
     generateProgression();
   }
 
+  function toRomanNumeral(degree) {
+    const majorNumerals = ["I", "ii", "iii", "IV", "V", "vi", "vii°"];
+    const naturalMinorNumerals = ["i", "ii°", "III", "iv", "v", "VI", "VII"];
+    
+    let numerals;
+    if (scaleType === "major-pentatonic" || scaleType === "major") {
+      numerals = majorNumerals;
+    } else {
+      numerals = majorNumerals; // fallback
+    }
+    
+    return numerals[degree - 1] || degree;
+  }
+
   function handleButtonAction() {
     if (!allSamplesLoaded) {
       // Do nothing, button is disabled
@@ -356,10 +469,9 @@
   {#if allSamplesLoaded && contextStarted}
     {#if genChordsOnce}
       <ol class="progressionList">
-        <li class="key" id="blurred">{key}</li>
         {#each progression as chord, idx}
           <li id="blurred" class={idx === activeProgressionIndex ? "live" : ""}>
-            {chord.degree}
+            <strong>{toRomanNumeral(chord.degree)}</strong>
           </li>
         {/each}
       </ol>
@@ -368,6 +480,12 @@
   {#if Tone.Transport.state === "started"}
     <div class="visualizer-container">
       <Visualizer audio={Tone.Master} />
+    </div>
+  {/if}
+  
+  {#if allSamplesLoaded && contextStarted && genChordsOnce}
+    <div class="scale-indicator">
+      {key} {scaleType === "major-pentatonic" ? "Major (Pentatonic)" : scaleType === "major" ? "Major" : "Natural Minor"}
     </div>
   {/if}
 </div>
@@ -429,15 +547,19 @@
     list-style: none;
     padding: 0;
     justify-content: center;
-    flex-wrap: wrap;
-    gap: 20px;
+    align-items: center;
     z-index: 1;
+    white-space: nowrap;
   }
 
   .progressionList li {
     padding: 5px 10px;
     border: 2px transparent;
-    border-radius: 4px;
+    font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+    font-weight: 900;
+    font-size: 14px;
+    min-width: 30px;
+    text-align: center;
   }
 
   .progressionList li.live {
@@ -453,6 +575,22 @@
     margin-top: 10px;
   }
 
+  .scale-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    font-family: monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    z-index: 5;
+    backdrop-filter: blur(5px);
+    background-color: rgba(0, 0, 0, 0.3);
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
   @media only screen and (max-width: 600px) {
     .play-button {
       margin-bottom: 40px;
@@ -465,6 +603,11 @@
     }
     .visualizer-container {
       display: none;
+    }
+    .scale-indicator {
+      bottom: 10px;
+      right: 10px;
+      font-size: 10px;
     }
   }
 </style>
