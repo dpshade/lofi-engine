@@ -44,7 +44,7 @@ class ProgressionPatterns {
       const substitutions = this.getSubstitutions(originalDegree, prevChord, nextChord, scaleType);
       if (substitutions.length > 0) {
         varied[modifyIndex] = substitutions[Math.floor(Math.random() * substitutions.length)];
-        console.log(`🎲 Varied chord at position ${modifyIndex + 1}: ${originalDegree} → ${varied[modifyIndex]} (context: ${prevChord}-${originalDegree}-${nextChord})`);
+
       }
     }
     
@@ -54,7 +54,7 @@ class ProgressionPatterns {
       const passingChord = this.getPassingChord(varied[insertIndex - 1], varied[insertIndex], scaleType);
       if (passingChord) {
         varied.splice(insertIndex, 0, passingChord);
-        console.log(`🎯 Added passing chord at position ${insertIndex}: ${passingChord}`);
+
       }
     }
     
@@ -64,7 +64,7 @@ class ProgressionPatterns {
       const reverseLength = 2 + Math.floor(Math.random() * 2); // 2-3 chords
       const section = varied.splice(reverseStart, reverseLength).reverse();
       varied.splice(reverseStart, 0, ...section);
-      console.log(`🔄 Reversed section starting at position ${reverseStart + 1}`);
+
     }
     
     return varied;
