@@ -196,11 +196,7 @@
       return `${semi}`;
     });
     
-    // Simplified debug logging
-    console.log(`🎹 CHORD ${progress + 1}/8: ${toRomanNumeral(chord.degree)} in ${key} ${scaleType}`);
-    console.log(`   Notes: [${noteNames.join(" - ")}]`);
-    console.log(`   Intervals: [${intervalNames.join(" - ")}]`);
-    console.log(`   Root: ${rootNote}`);
+
     
     // Add procedural dynamics to chords with musical context
     let baseVelocity = 0.7; // Base velocity
@@ -298,7 +294,7 @@
     // Add random variation and cap at reasonable range
     const melodyVelocity = Math.max(0.5, Math.min(1.0, baseMelodyVelocity + (Math.random() - 0.5) * 0.3));
     
-    console.log(`🎵 Melody: ${noteName} in ${key} ${scaleType} (velocity: ${melodyVelocity.toFixed(2)})`);
+
     // @ts-ignore
     pn.triggerAttackRelease(melodyNote, "2n", undefined, melodyVelocity);
   }
@@ -333,8 +329,7 @@
       newProgression = ChordProgression.generate(8, chords, "major-pentatonic");
       newScalePos = Math.floor(Math.random() * pentatonicFiveToFive.length);
       
-      console.log(`=== ${newKey} MAJOR with PENTATONIC MELODY ===`);
-      console.log("Pentatonic scale intervals:", pentatonicFiveToFive);
+
     } else if (newScaleType === "major") {
       // Plain major with full diatonic melody
       _scale = majorScale;
@@ -346,21 +341,10 @@
       newProgression = ChordProgression.generate(8, chords, "major");
       newScalePos = Math.floor(Math.random() * _scale.length);
       
-      console.log(`=== ${newKey} PLAIN MAJOR PROGRESSION ===`);
-      console.log("Major scale intervals:", _scale);
+
     }
     
-    console.log("Scale notes:", newScale);
-    console.log("Chord progression:");
-    newProgression.forEach((chord, idx) => {
-      const root = Tone.Frequency(newKey + "3").transpose(chord.semitoneDist);
-      const voicing = chord.generateVoicing(4);
-      const notes = Tone.Frequency(root)
-        .harmonize(voicing)
-        .map((f) => Tone.Frequency(f).toNote());
-      console.log(`  ${idx + 1}. Degree ${chord.degree} (${chord.semitoneDist} semitones): [${notes.join(", ")}]`);
-    });
-    console.log("=====================================");
+
 
     key = newKey;
     scaleType = newScaleType;
