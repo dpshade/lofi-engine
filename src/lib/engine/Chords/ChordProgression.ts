@@ -1,22 +1,23 @@
 import Chords from './Chords';
 import Chord from './Chord';
+import ProgressionPatterns from './ProgressionPatterns';
 
 class ChordProgression {
-    static generate(length) {
+    static generate(length, customChords = Chords, scaleType = "major") {
         if(length < 2)
             return null;
 
-        const progression = [];
-        let chord = Chords[Math.floor(Math.random()*Chords.length)];
-        
-        for(let i = 0; i < length; i++) {
-            progression.push(new Chord(
+        // Get a predefined pattern
+        const pattern = ProgressionPatterns.generate(scaleType, length);
+
+        // Convert pattern degrees to actual chord objects
+        const progression = pattern.map(degree => {
+            const chord = customChords[degree - 1]; // degrees are 1-based, array is 0-based
+            return new Chord(
                 chord.degree,
                 [...chord.intervals],
-                [...chord.nextChordIdxs]));
-            chord = Chords[chord.nextChordIdx()];
-        }
-        
+                [...chord.nextChordIdxs]);
+        });
         return progression;
     }
 }

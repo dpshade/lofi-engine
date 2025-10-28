@@ -67,7 +67,7 @@
       activeAudios.forEach((item) => {
         item.audio.pause();
       });
-      console.log("activeAudios", activeAudios);
+
       activeAudios = [];
       tracks.forEach((track) => {
         track.isPlaying = false;
